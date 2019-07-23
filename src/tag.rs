@@ -732,7 +732,6 @@ impl<Data> Default for AudioTagEncoder<Data> {
 
 #[derive(Debug)]
 struct VideoTagEncoder<Data> {
-    header: TagHeaderEncoder,
     video_specific: U8Encoder,
     avc_specific: U32beEncoder,
     data: BytesEncoder<Data>,
@@ -742,7 +741,6 @@ impl<Data: AsRef<[u8]>> Encode for VideoTagEncoder<Data> {
 
     fn encode(&mut self, buf: &mut [u8], eos: Eos) -> Result<usize> {
         let mut offset = 0;
-        bytecodec_try_encode!(self.header, offset, buf, eos);
         bytecodec_try_encode!(self.video_specific, offset, buf, eos);
         bytecodec_try_encode!(self.avc_specific, offset, buf, eos);
         bytecodec_try_encode!(self.data, offset, buf, eos);
@@ -763,13 +761,6 @@ impl<Data: AsRef<[u8]>> Encode for VideoTagEncoder<Data> {
             + self.data.exact_requiring_bytes();
         track_assert!(data_size <= 0xFF_FFFF, ErrorKind::InvalidInput; data_size);
 
-        let header = TagHeader {
-            tag_type: TagKind::Video,
-            data_size: data_size as u32,
-            timestamp: item.timestamp,
-            stream_id: item.stream_id,
-        };
-        track!(self.header.start_encoding(header))?;
         Ok(())
     }
 
@@ -778,16 +769,14 @@ impl<Data: AsRef<[u8]>> Encode for VideoTagEncoder<Data> {
     }
 
     fn is_idle(&self) -> bool {
-        self.header.is_idle()
-            && self.video_specific.is_idle()
+        self.video_specific.is_idle()
             && self.avc_specific.is_idle()
             && self.data.is_idle()
     }
 }
 impl<Data: AsRef<[u8]>> SizedEncode for VideoTagEncoder<Data> {
     fn exact_requiring_bytes(&self) -> u64 {
-        self.header.exact_requiring_bytes()
-            + self.video_specific.exact_requiring_bytes()
+            self.video_specific.exact_requiring_bytes()
             + self.avc_specific.exact_requiring_bytes()
             + self.data.exact_requiring_bytes()
     }
@@ -795,7 +784,6 @@ impl<Data: AsRef<[u8]>> SizedEncode for VideoTagEncoder<Data> {
 impl<Data> Default for VideoTagEncoder<Data> {
     fn default() -> Self {
         VideoTagEncoder {
-            header: TagHeaderEncoder::default(),
             video_specific: U8Encoder::default(),
             avc_specific: U32beEncoder::default(),
             data: BytesEncoder::default(),
