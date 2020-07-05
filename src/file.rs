@@ -76,6 +76,7 @@ impl<Data> Default for FileEncoder<Data> {
 /// [specification]: https://wwwimages2.adobe.com/content/dam/acom/en/devnet/flv/video_file_format_spec_v10.pdf
 #[derive(Debug, Default)]
 pub struct FileDecoder {
+    eof: bool,
     header: Peekable<TupleDecoder<(HeaderDecoder, U32beDecoder)>>,
     tag: MaybeEos<TagDecoder>,
     prev_tag_size: U32beDecoder,
@@ -97,6 +98,10 @@ impl Decode for FileDecoder {
     type Item = Tag;
 
     fn decode(&mut self, buf: &[u8], eos: Eos) -> Result<usize> {
+        if eos.is_reached() {
+            self.eof = true;
+            return Err(ErrorKind::DecoderTerminated.into());
+        }
         let mut offset = 0;
         if !self.header.is_idle() {
             bytecodec_try_decode!(self.header, offset, buf, eos);
@@ -121,6 +126,9 @@ impl Decode for FileDecoder {
     }
 
     fn requiring_bytes(&self) -> ByteCount {
+        if self.eof {
+            return ByteCount::Finite(0);
+        }
         self.header
             .requiring_bytes()
             .add_for_decoding(self.tag.requiring_bytes())
